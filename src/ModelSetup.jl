@@ -151,8 +151,8 @@
         @inbounds for i in 1:grid.Nx, j in 1:grid.Ny, k in 1:grid.Nz+1
              if cc_params_with_geom.hFacS[i, j, k] < 1e-10
                  # The model w field is not computed directly, it's a diagnostic output.
-                 # We don't need to mask the *model's* internal w (which doesn't exist or is always zero),
-                 # but we need to mask the *diagnostic* w field *after* it's computed.
+                 # dont need to mask the *model's* internal w (which doesn't exist or is always zero),
+                 # mask the *diagnostic* w field *after* it's computed.
                  # The diagnostic function itself handles setting w=0 where hFacS=0.
                  # So no need to mask the initial model.velocities.w (which is likely a ZeroField or ConstantField(0)).
              end
