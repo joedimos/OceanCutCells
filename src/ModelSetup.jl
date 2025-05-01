@@ -51,7 +51,7 @@
 
         # Bundle Cut-Cell Parameters (using merged geometry where appropriate)
         # Pass the geometry fields back to the parameters struct.
-        # Note: We are using the initial (non-merged) hFacW/S and face areas
+        # Note: Using the initial (non-merged) hFacW/S and face areas
         # as the merging logic only applied to C cells and volumes.
         cc_params_with_geom = CutCellParameters(
             hFacC = hFacC_merged,
