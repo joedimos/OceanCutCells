@@ -22,8 +22,7 @@
 
         # --- Grid Generation ---
         # Non-uniform z-spacing: More resolution near the surface
-        # This function definition should maybe live here or be passed in.
-        # For now, let's define it here as it's specific to this grid setup.
+       
         z_stretching = 1.3 # Factor for vertical stretching
         z_faces_func(k) = -params.total_depth * (k/params.nz)^z_stretching
 
