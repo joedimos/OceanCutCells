@@ -72,6 +72,4 @@ The codebase is organized into a standard Julia package structure:
 
 This package is based on initial code and concepts for cut-cell implementation in Oceananigans.jl.
 
-## License
 
-[Consider adding a LICENSE.md file to specify the terms under which this code can be used and distributed, e.g., MIT License.]
