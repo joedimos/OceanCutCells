@@ -1,7 +1,7 @@
     using Oceananigans
     using Oceananigans.Units
     using JLD2
-    using CairoMakie # Needed for plotting later
+    using CairoMakie
     using Printf
 
     
