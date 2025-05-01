@@ -5,6 +5,6 @@
 
     @testset "OceanCutCells tests" begin
         include("test_geometry.jl")
-        # include("test_forcings.jl") # Add tests for forcings later
-        # include("test_model_setup.jl") # Add tests for model setup later
+        # include("test_forcings.jl")
+        # include("test_model_setup.jl")
     end
