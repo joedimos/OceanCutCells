@@ -16,14 +16,14 @@
     using Printf # Moved from the script
     using JLD2 # Moved from the script
 
-    # Include all component files
+    
     include("Parameters.jl")
     include("Geometry.jl")
     include("Forcings.jl")
     include("Diagnostics.jl")
     include("ModelSetup.jl")
 
-    # Export things that users might need
+    
     export
         # Parameters
         CutCellParameters,
