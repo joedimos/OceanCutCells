@@ -1,0 +1,13 @@
+name = "OceanCutCells"
+    uuid = 
+    authors = ["Joseph Dimos <joedimos@gmail.com>"]
+    version = "0.1.0"
+
+    [deps]
+    Oceananigans = "b520189e-3c20-4b93-a613-f7c1ac58d8b1"
+    JLD2 = "033835bb-8acc-55fc-b787-60bd55ba30db"     
+    CairoMakie = "13f3f980-e62b-5c42-98c6-cf12439c8cbb" 
+    Printf = "998d150c-3e9c-568f-8a8b-c7e8b23dafc1"    
+    Test = "8dfed614-e1e5-5f19-93ae-2cd2dad6799e"      
+    Revise = "d6f4376e-257a-40bf-b5b0-4f5e2b3b06d0"    
+   
