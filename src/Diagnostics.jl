@@ -1,126 +1,166 @@
-    module Diagnostics
+module Diagnostics
 
-    using Oceananigans
-    using Oceananigans.Fields: Center, Face, Field
-    using Oceananigans.BoundaryConditions: fill_halo_regions
+using Oceananigans
+using Oceananigans.Fields: Center, Face, Field, fill_halo_regions
+using Oceananigans.Grids: ImmersedBoundaryGrid, is_immersed_cell, is_immersed_face,
+                          volume, areaᶜᶜᶠ, areaᶠᶜᶜ # Access geometry from IBG
 
-    using ..Parameters: CutCellParameters # Access the struct
+# Custom diagnostic to calculate w (at C,C,F) from u (at F,C,C) using continuity
+# ∇ . u = ∂u/∂x + ∂w/∂z = 0
+# Integrate d(w*Area_z)/dz = -d(u*Area_x)/dx from bottom up.
+# (w*Area_z)_at_face_k = (w*Area_z)_at_face_k+1 + Net_Horiz_Vol_Flux_INTO_cell_k+1
+# Net_Horiz_Vol_Flux_INTO_cell_k+1 = (u*Area_x)_W - (u*Area_x)_E for cell k+1
+# w_field[i,j,k] corresponds to velocity at face k (z_F[k+1])
 
-    # Custom diagnostic to calculate w (at C,C,F) from u (at F,C,C) using continuity
-    # ∇ . u = ∂u/∂x + ∂w/∂z = 0
-    # Integrate d(wA_z)/dz = -d(uA_x)/dx from bottom up.
-    # (wA_z)_at_face_k = (wA_z)_at_face_k+1 + Net_Horiz_Vol_Flux_INTO_cell_k+1
-    # Net_Horiz_Vol_Flux_INTO_cell_k+1 = (u*A_x)_W - (u*A_x)_E for cell k+1
-    # w_field[i,j,k] corresponds to velocity at face k (z_F[k+1])
-    function diagnose_cut_cell_w!(w_field, model)
-        grid = model.grid
-        u = model.velocities.u
-        cc_params = model.parameters.cut_cell_params # Access bundled parameters
-        Hx, Hy, Hz = grid.Hx, grid.Hy, grid.Hz
+function diagnose_cut_cell_w!(w_field, model)
+    grid = model.grid # This is now an ImmersedBoundaryGrid
+    u = model.velocities.u
+    # cc_params = model.parameters.cut_cell_params # No longer needed for geometry
 
-        fill_halo_regions!(u) # Ensure u halos are up-to-date
+    fill_halo_regions!(u) # Ensure u halos are up-to-date
 
-        # Temporary field to store vertical volume flux (w*Area_z)
-        vertical_volume_flux = Field{Center, Center, Face}(grid)
-        # Initialize flux at the bottommost horizontal face (k=Nz+1) to 0.
-        # w_field index k=Nz+1 corresponds to face index Nz+1
-        w_field.data[i+Hx, j+Hy, grid.Nz+Hz] = 0.0 # w at bottom boundary is 0
-        vertical_volume_flux.data[i+Hx, j+Hy, grid.Nz+Hz] = 0.0 # Vertical volume flux at bottom face is 0
+    # Temporary field to store vertical volume flux (w*Area_z)
+    # Create a field at the same location as w_field (C,C,F)
+    vertical_volume_flux = Field{Center, Center, Face}(grid)
 
-        # Integrate upwards from k_cell = grid.Nz down to 1
-        @inbounds for i in 1:grid.Nx, j in 1:grid.Ny
-            # Initialize vertical flux at the bottom of the water column for this (i,j) pillar
-            vertical_volume_flux_at_face_above = 0.0 # This is the flux at face k_cell + 1 initially
+    # Integrate from bottom up (k = grid.Nz down to 1 for C cell indices)
+    # w_field[i,j,k] lives at z_F[k+1] (Face k).
+    # The bottommost horizontal face is at z_F[grid.Nz+1] (Face grid.Nz+1).
+    # The index for this face in w_field/vertical_volume_flux is grid.Nz+1.
 
-            # Loop k_cell from Nz down to 1 (C cell index)
-            # The horizontal divergence is for cell k_cell. This divergence drives the flux difference between face k_cell and face k_cell-1.
-            # Net horizontal volume flux INTO cell k_cell: (u*A)_W - (u*A)_E
-            # (u*A)_W = u[i,j,k_cell] * wet_face_area_x[i,j,k_cell] # at Face i (u index i), at height of cell k_cell
-            # (u*A)_E = u[i+1,j,k_cell] * wet_face_area_x[i+1,j,k_cell] # at Face i+1 (u index i+1), at height of cell k_cell
+    # Initialize flux at the bottom boundary (k=Nz+1 face) to 0.
+    # Face index Nz+1 corresponds to array index Nz+Hz.
+    @inbounds for i in 1:grid.Nx, j in 1:grid.Ny
+         # Check if the bottom boundary face is actually wet/solid
+         # The IBG should handle BCs, but for integration, the flux at the boundary is zero.
+         # If !is_immersed_face(i, j, grid.Nz+1, grid, c, c, f) # This face connects to solid bottom
+         # Then flux is 0. Our integration naturally starts from 0 at the bottom boundary.
+         vertical_volume_flux[i, j, grid.Nz+1] = 0.0
+    end
 
-             # Check hFacW for horizontal flux connectivity
-             flux_u_w = cc_params.hFacW[i, j, k_cell] > 1e-10 ? u[i, j, k_cell] * cc_params.wet_face_area_x[i, j, k_cell] : 0.0
-             flux_u_e = (i <= grid.Nx && cc_params.hFacW[i+1, j, k_cell] > 1e-10) ? u[i+1, j, k_cell] * cc_params.wet_face_area_x[i+1, j, k_cell] : 0.0
-             net_horiz_flux_into_cell = flux_u_w - flux_u_e # Net flux INTO cell (i,j,k_cell)
+    # Integrate upwards from k_cell = grid.Nz down to 1 (C cell index)
+    @inbounds for i in 1:grid.Nx, j in 1:grid.Ny
+        # Loop over C cells in vertical (from bottom up)
+        for k_cell in grid.Nz : -1 : 1
 
-             # Continuity: Sum of fluxes into cell = 0
-             # (uA)_W - (uA)_E + (wA)_Top - (wA)_Bottom = 0
-             # (wA)_Bottom = (wA)_Top + (uA)_W - (uA)_E
-             # (wA) at face k_cell = (wA) at face k_cell - 1 + Net_Horiz_Flux_INTO_cell_k_cell (integrating downwards)
+            # Only integrate if the cell (i,j,k_cell) is wet
+            if !is_immersed_cell(i, j, k_cell, grid, Center(), Center(), Center())
 
-             # Integrate upwards: (wA)_Top = (wA)_Bottom - (uA)_W + (uA)_E
-             # (wA) at face k_cell - 1 = (wA) at face k_cell + Net_Horiz_Flux_INTO_cell_k_cell
-             # F_{k-1} = F_k + H_k
-             # Flux at face k-1 (w_field index k-1) = Flux at face k (w_field index k) + Net horizontal flux into cell k
+                # Net Horizontal Volume Flux INTO cell (i,j,k_cell) (located at C,C,C)
+                # Flux IN across west face (i) is u[i,j,k_cell] * WetArea_x_West
+                # Flux OUT across east face (i+1) is u[i+1,j,k_cell] * WetArea_x_East
+                # WetArea_x at Face i, C cell k_cell is areaᶠᶜᶜ(i, j, k_cell, grid)
 
-             # Let vertical_volume_flux[i,j,k] store the flux at FACE k (w_field index k).
-             # vertical_volume_flux[i,j,Nz+1] = 0
-             # vertical_volume_flux[i,j,k_cell-1] = vertical_volume_flux[i,j,k_cell] + net_horiz_flux_into_cell for cell k_cell
+                flux_u_w = 0.0
+                # Check if the west face (i) is wet
+                if !is_immersed_face(i, j, k_cell, grid, Face(), Center(), Center())
+                     # Note: u[i,j,k_cell] is at F[i], C[j], C[k_cell]. This lines up.
+                     flux_u_w = u[i, j, k_cell] * areaᶠᶜᶜ(i, j, k_cell, grid)
+                end
 
-             # This means we sum up the horizontal flux divergence from the bottom.
-             # Let's calculate divergence for cell k_cell first.
-             horiz_vol_flux_div_cell = flux_u_e - flux_u_w # Divergence = Out - In
+                flux_u_e = 0.0
+                # Check if the east face (i+1) is wet
+                if (i <= grid.Nx) && !is_immersed_face(i+1, j, k_cell, grid, Face(), Center(), Center())
+                     # Note: u[i+1,j,k_cell] is at F[i+1], C[j], C[k_cell]. This lines up.
+                     flux_u_e = u[i+1, j, k_cell] * areaᶠᶜᶜ(i+1, j, k_cell, grid)
+                end
 
-             # Vertical volume flux at face k_cell (w_field index k_cell)
-             # vvf[i,j,k_cell] = vvf[i,j,k_cell+1] + horiz_vol_flux_div_cell_k_cell
-             # This is integrating divergence upwards.
+                net_horiz_vol_flux_into_cell = flux_u_w - flux_u_e
 
-             # vertical_volume_flux.data[i+Hx, j+Hy, k_cell+Hz-1] will store flux at face k_cell (w index k_cell)
-             # vertical_volume_flux.data[i+Hx, j+Hy, k_cell+1+Hz-1] stores flux at face k_cell+1 (w index k_cell+1)
+                # Vertical volume flux at face k_cell (z_F[k_cell+1])
+                # This face is the bottom face of cell (i,j,k_cell).
+                # This is the location of w_field[i,j,k_cell].
 
-             # Flux at face k_cell = Flux at face k_cell + 1 - Horizontal Divergence in cell k_cell + 1? No.
-             # Flux at face k = Flux at face k+1 + Net Horizontal Flux Into Cell k+1
-             # Flux at face k (w_field index k) = Flux at face k+1 (w_field index k+1) + Net Horiz Flux Into Cell k+1 (C index k+1)
+                # Continuity: Sum of volume fluxes over cell boundaries is zero.
+                # (uA)_E - (uA)_W + (wA)_Top - (wA)_Bottom = 0
+                # In 2D: -(Horizontal Divergence) + (wA)_Top - (wA)_Bottom = 0
+                # (wA)_Bottom = (wA)_Top - Horizontal Divergence
+                # (wA)_at_face_k_cell = (wA)_at_face_k_cell-1 + Net_Horiz_Flux_INTO_cell_k_cell
+                # Integrating upwards from bottom boundary (face Nz+1):
+                # Flux at face k (w_field index k) = Flux at face k+1 (w_field index k+1) + Net Horiz Flux INTO cell k+1? No.
+                # Flux at face k (w_field index k) = Flux at face k+1 (w_field index k+1) + Net Horiz Flux INTO cell k? No.
 
-             # Loop k_cell from Nz down to 1 (C index)
-             # Flux at face k_cell (w_field index k_cell) = Flux at face k_cell + 1 (w_field index k_cell + 1) + Net Horiz Flux INTO cell k_cell
-             k_face_at = k_cell      # Index for w_field and vertical_volume_flux at face k_cell (z_F[k_cell+1])
-             k_face_below = k_cell + 1 # Index for w_field and vertical_volume_flux at face k_cell+1 (z_F[k_cell+2])
+                # Let F_k be the vertical volume flux across face k (w[i,j,k] location, z_F[k+1]).
+                # Sum of fluxes IN = Sum of fluxes OUT for cell (i,j,k).
+                # (uA)_W - (uA)_E + (wA)_Top - (wA)_Bottom = 0
+                # Horizontal flux IN = (uA)_W - (uA)_E = net_horiz_vol_flux_into_cell
+                # Vertical flux IN = (wA)_Top = flux at face k-1 = vvf[i,j,k-1]
+                # Vertical flux OUT = (wA)_Bottom = flux at face k = vvf[i,j,k]
+                # net_horiz_vol_flux_into_cell + vvf[i,j,k-1] - vvf[i,j,k] = 0
+                # vvf[i,j,k-1] = vvf[i,j,k] - net_horiz_vol_flux_into_cell (integrating downwards)
+                # vvf[i,j,k] = vvf[i,j,k-1] + net_horiz_vol_flux_into_cell (integrating upwards - WRONG sign)
+                # The horizontal divergence is d(uA)/dx. Continuity: d(wA)/dz = -d(uA)/dx.
+                # (wA)_top - (wA)_bottom / dz = - ( (uA)_E - (uA)_W ) / dx
+                # (wA)_k-1 - (wA)_k / dz = - ( (uA)_E - (uA)_W ) / dx
+                # (wA)_k = (wA)_k-1 + ( (uA)_E - (uA)_W ) / dx * dz? No.
 
-             # Get flux from face below (already computed in previous iteration, or 0 for k=Nz+1)
-             flux_below = vertical_volume_flux.data[i+Hx, j+Hy, k_face_below+Hz-1] # Flux at face k_cell+1
+                # Let's re-read the original code's logic:
+                # "Vertical volume flux at face k_cell (w_field index k_cell)..."
+                # "flux_at_face = flux_below + net_horiz_flux_into_cell"
+                # This implied: vvf[i,j,k_face_at] = vvf[i,j,k_face_below] + net_horiz_flux_into_cell
+                # vvf[i,j,k_cell] = vvf[i,j,k_cell+1] + net_horiz_flux_into_cell_for_cell_k_cell
+                # This means integrating upwards: Flux at face k = Flux at face k+1 + Net Horizontal Flux *INTO* cell k (between faces k and k+1)
 
-             # Net horizontal volume flux into cell k_cell (C index)
-             # This is defined across faces at the same height as cell k_cell.
-             flux_u_w = cc_params.hFacW[i, j, k_cell] > 1e-10 ? u[i, j, k_cell] * cc_params.wet_face_area_x[i, j, k_cell] : 0.0
-             flux_u_e = cc_params.hFacW[i+1, j, k_cell] > 1e-10 ? u[i+1, j, k_cell] * cc_params.wet_face_area_x[i+1, j, k_cell] : 0.0
-             net_horiz_flux_into_cell = flux_u_w - flux_u_e
+                # Get flux from face below (already computed in previous iteration, or 0 for k=Nz+1)
+                flux_below = vertical_volume_flux[i, j, k_cell + 1] # Flux at face k_cell+1
 
-             # Vertical volume flux at face k_cell (w_field index k_cell)
-             # F_k = F_{k+1} + Net_H_flux_into_cell_k
-             flux_at_face = flux_below + net_horiz_flux_into_cell
-             vertical_volume_flux.data[i+Hx, j+Hy, k_face_at+Hz-1] = flux_at_face
+                # Vertical volume flux at face k_cell (w_field index k_cell)
+                flux_at_face = flux_below + net_horiz_vol_flux_into_cell
+                vertical_volume_flux[i, j, k_cell] = flux_at_face
 
-             # Convert flux to velocity W at face k_cell
-             if cc_params.wet_face_area_z[i, j, k_face_at] > 1e-15
-                  w_field.data[i+Hx, j+Hy, k_face_at+Hz-1] = flux_at_face / cc_params.wet_face_area_z[i, j, k_face_at]
-             else
-                  w_field.data[i+Hx, j+Hy, k_face_at+Hz-1] = 0.0
-             end
+                # Convert flux to velocity W at face k_cell (z_F[k_cell+1])
+                face_area_z = areaᶜᶜᶠ(i, j, k_cell, grid)
+                if face_area_z > 1e-15
+                     w_field[i, j, k_cell] = flux_at_face / face_area_z
+                else
+                     w_field[i, j, k_cell] = 0.0
+                end
 
-             # Ensure W is zero if the face hFacS is zero (explicit mask)
-             if cc_params.hFacS[i, j, k_face_at] < 1e-10
-                  w_field.data[i+Hx, j+Hy, k_face_at+Hz-1] = 0.0
-             end
+                # Explicitly set W to zero if the face is solid (is_immersed_face)
+                if is_immersed_face(i, j, k_cell, grid, Center(), Center(), Face())
+                     w_field[i, j, k_cell] = 0.0
+                end
+
+            else # If the C cell (i,j,k_cell) is immersed (dry)
+                 # The faces surrounding it should also have zero flux and velocity.
+                 # Face k_cell (below cell k_cell) is at w[i,j,k_cell]
+                 # Face k_cell-1 (above cell k_cell) is at w[i,j,k_cell-1]
+                 # If cell k_cell is dry, the flux across face k_cell-1 should equal flux across face k_cell (no divergence).
+                 # However, the loop is integrating based on horizontal flux *into* a cell. If the cell is dry, this flux is zero.
+                 # vvf[i,j,k_cell] = vvf[i,j,k_cell+1] + 0
+                 # This means the flux above a dry cell equals the flux below it.
+                 # The velocity should be zero at faces connected to dry cells.
+                 # Let's enforce zero velocity at the face if the face itself is immersed OR if *both* adjacent cells are immersed.
+                 # The is_immersed_face check above handles the face being solid.
+                 # What if the face is wet but both adjacent cells are dry? Then w should be 0.
+                 # Let's rely on is_immersed_face as the primary mask for w.
+
+                 # If cell k_cell is dry, net_horiz_vol_flux_into_cell = 0 (fluxes across its boundaries are zero).
+                 # So vertical_volume_flux[i,j,k_cell] = vertical_volume_flux[i,j,k_cell+1] + 0.
+                 # This seems correct for dry cells: vertical flux is conserved across dry regions.
+                 # The velocity needs to be zero at the faces of dry cells. This is handled by the is_immersed_face check above.
+            end # if !is_immersed_cell
 
         end # Loop over k_cell (Nz down to 1)
     end # Loop over i,j
 
-    # Handle top boundary w (at k=1, z_F[1]). This w should be zero for a rigid lid.
-    # The integration calculated the flux and velocity at k=1. If z_F[1] is not the surface, this is an internal face.
-    # If z_F[1] is the surface (k=1), then the boundary condition w=0 applies here.
-    # The current loop calculates w at k=1 based on flux convergence below.
-    # If top BC is w=0, need to enforce it. Let's assume w=0 at z=0 (rigid lid).
+    # Handle top boundary w (at k=1, z_F[1]).
+    # The integration calculated the flux and velocity at k=1.
+    # If z_F[1] is the surface (k=1), then the boundary condition w=0 applies here for a rigid lid.
     @inbounds for i in 1:grid.Nx, j in 1:grid.Ny
         if grid.zᵃᵃᶠ[1] == 0.0 # If the top face is at z=0
-             w_field.data[i+Hx, j+Hy, 1+Hz-1] = 0.0 # Set w at k=1 to 0
+             w_field[i, j, 1] = 0.0 # Set w at k=1 face to 0
+         end
+         # Ensure W is zero if the face is solid even at the top boundary
+         if is_immersed_face(i, j, 1, grid, Center(), Center(), Face())
+             w_field[i, j, 1] = 0.0
          end
     end
 
-        # Fill halos for w field after calculation
-        fill_halo_regions!(w_field)
+    # Fill halos for w field after calculation
+    fill_halo_regions!(w_field)
 
-        return nothing
-    end
+    return nothing
+end
 
-    end # module Diagnostics
+end # module Diagnostics
