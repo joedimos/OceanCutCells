@@ -1,40 +1,34 @@
-    module Parameters
+module Parameters
 
-    using Oceananigans.Fields: Center, Face, Field
 
-    # Define the struct containing parameters, including cut-cell geometry fields
-    struct CutCellParameters
-        # Cut-Cell Geometry Fields (These will hold the *merged* or relevant geometry)
-        hFacC :: Field{Center, Center, Center}
-        hFacW :: Field{Face, Center, Center}
-        hFacS :: Field{Center, Center, Face}
-        wet_cell_volume   :: Field{Center, Center, Center}
-        recip_wet_cell_volume :: Field{Center, Center, Center}
-        wet_face_area_x :: Field{Face, Center, Center} # At West face i
-        wet_face_area_z :: Field{Center, Center, Face} # At Bottom face k
+# Define the struct containing physical parameters
+# Removed all geometry fields (hFac, wet_volume, wet_area)
+struct CutCellParameters
+    # Physical Parameters
+    rho0 :: Float64
+    g :: Float64
+    Kh :: Float64
+    Kv :: Float64
+    Ah :: Float64
+    Av :: Float64
+    bottom_drag_coeff :: Float64
+    alpha :: Float64
+    beta :: Float64
+    T0 :: Float64
+    S0 :: Float64
 
-        # Physical Parameters
-        rho0 :: Float64
-        g :: Float64
-        Kh :: Float64
-        Kv :: Float64
-        Ah :: Float64
-        Av :: Float64
-        bottom_drag_coeff :: Float64
-        alpha :: Float64 # Added from main script
-        beta :: Float64  # Added from main script
-        T0 :: Float64   # Added from main script
-        S0 :: Float64   # Added from main script
+    # Parameters needed for model setup (like wind stress)
+    wind_stress_tau_x :: Float64 # Added wind stress
 
-        # Grid Parameters (might be useful to store here or pass separately)
-        nx :: Int # Added grid dimensions
-        nz :: Int
-        total_width :: Float64
-        total_depth :: Float64
-        x_domain :: Tuple{Float64, Float64}
-        z_domain :: Tuple{Float64, Float64}
-        dt :: Float64 # Added time step
+    # Grid Parameters (useful to store simulation-specific settings)
+    nx :: Int
+    nz :: Int
+    total_width :: Float64
+    total_depth :: Float64
+    x_domain :: Tuple{Float64, Float64}
+    z_domain :: Tuple{Float64, Float64} # z_domain is informational, grid is built from z_faces
+    dt :: Float64 # Time step
 
-    end
+end
 
-    end # module Parameters
+end # module Parameters
