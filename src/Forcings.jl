@@ -8,8 +8,7 @@ using Oceananigans.Operators: ∂xᶠᶜᶜ # Use standard gradient operator
 using Oceananigans.Fields: Center, Face, fill_halo_regions
 using Oceananigans.Forcings: CustomForcing
 
-# Note: The custom forcing functions now get geometry information from `model.grid`
-# and physical parameters from `model.parameters.cut_cell_params`.
+
 
 # 1. Pressure Gradient Force for u (at Face, Center, Center)
 # Adds ∂u∂t = -(1/ρ₀) ∂p/∂x
@@ -315,7 +314,7 @@ function add_cut_cell_vertical_advection_u!(∂u∂t, model)
             # --- Vertical Fluxes (North - South) of u ---
             # Flux across horizontal face at z_F[k+1] (below u[i,j,k]) - This is face index k.
             # w[i,j,k] is at C[i],C[j],F[k]. WetArea_face_z is areaᶜᶜᶠ(i,j,k, grid).
-            # We need flux at F,C,F. Let's approximate w at F by taking w[i,j,k].
+            # Need flux at F,C,F. Let's approximate w at F by taking w[i,j,k].
             # Flux_below = w[i,j,k] * u_upstream * WetArea_face_z[i,j,k]
             flux_below_u_vert = 0.0 # Flux out the bottom of u[i,j,k] cell
             # Check if the face below u[i,j,k] is wet. This is the face at z_F[k+1], index k.
@@ -374,24 +373,24 @@ function add_cut_cell_vertical_advection_u!(∂u∂t, model)
 
                  # The divergence is (flux_above - flux_below) / V_u_cell * Area_face_z? No.
                  # The divergence is d(w u)/dz. Discretely this is [(wu)_above - (wu)_below] / Δz_u_cell
-                 # We computed flux = wu * Area_face. So we need (Flux_above/Area_above - Flux_below/Area_below) / Δz_u_cell?
+                 # Computed flux = wu * Area_face. Need (Flux_above/Area_above - Flux_below/Area_below) / Δz_u_cell?
                  # No, the tendency is - ∇ . (uv). For vertical part: -∂/∂z(wu).
                  # Discrete form at F,C,C (i,j,k) is - [ (wu)_face_k-1 - (wu)_face_k ] / Δz_u_cell
                  # where (wu)_face_k-1 = Flux_above / Area_face_above
                  #       (wu)_face_k = Flux_below / Area_face_below
 
                  # This is getting complex with staggered grid and cut cells.
-                 # Let's approximate the vertical divergence simply as:
+                 # Approximate the vertical divergence simply as:
                  # (Flux_above - Flux_below) / V_u_cell (Volume divergence -> m^3/s / m^3 = 1/s)
                  # We need acceleration (m/s^2). The forcings are defined to add ACCELERATION.
                  # ∇ . (uv) has units of velocity * gradient(velocity) ~ (m/s) * ( (m/s)/m ) = m/s^2.
                  # So the formula should be -∂/∂z(wu) which is approx - [(wu)_above - (wu)_below] / Δz_u_cell.
                  # where (wu)_above and (wu)_below are velocities at the faces.
                  # (wu)_face_k-1 is the vertical velocity at face k-1 multiplied by u interpolated at Face k-1.
-                 # Let's use the fluxes calculated:
+                 # Fluxes calculated:
                  # vertical_advection_accel = - (Flux_above_u_vert - Flux_below_u_vert) / V_u_cell * Area_face_z ? No.
 
-                 # Let's use the simpler finite volume form: Sum of fluxes / Volume
+                 # Simpler finite volume form: Sum of fluxes / Volume
                  # ∂u/∂t = - (Flux_out - Flux_in) / Volume = - (Flux_below - Flux_above) / V_u_cell
                  vertical_advection_accel = - (flux_below_u_vert - flux_above_u_vert) / V_u_cell
 
