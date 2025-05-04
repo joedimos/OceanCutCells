@@ -21,7 +21,6 @@ function bathymetry_profile(x)
     return max(50.0, depth) # Min depth
 end
 
-# The derivative is not strictly needed for the standard CutCellBottom pattern,
 
 function bathymetry_derivative(x)
     total_width = 40000.0 # Hardcoding or pass parameters
@@ -87,7 +86,6 @@ end
 # In Oceananigans' standard IBG, `bottom_cell(i,j,k)` is the *wet* cell immediately *above* a solid cell.
 # A solid cell is immersed_cell(i,j,k, ...).
 # The partially wet cell at k is the one where immersed_cell(i,j,k,...) is false but immersed_cell(i,j,k+1,...) is true.
-# Let's correct this based on typical Oceananigans IBG usage for bottom cells.
 # A C cell (i,j,k) is a "bottom cell" if it's wet, but the cell below it (k+1) is solid.
 @inline bottom_cell(i, j, k, ibg::ImmersedBoundaryGrid{<:Any, <:Any, <:Any, <:Any, <:Any, <:CutCellBottom}) =
     !immersed_cell(i, j, k, ibg.underlying_grid, ibg.immersed_boundary) & # Cell k is wet
@@ -98,9 +96,7 @@ end
     @inbounds ibg.immersed_boundary.bottom_height[i, j] # Assuming bottom_height is at C,C
 
 # --- Specialized Δz accessors for CutCellBottom ---
-# These define the effective vertical height of cells/faces near the boundary.
-# They are typically used by Oceananigans' built-in operators.
-# We need to define them for the ImmersedBoundaryGrid containing CutCellBottom (SCIBG).
+# Define for the ImmersedBoundaryGrid containing CutCellBottom (SCIBG).
 const SCIBG = ImmersedBoundaryGrid{<:Any, <:Any, <:Any, <:Any, <:Any, <:CutCellBottom}
 
 @inline function Δzᶜᶠᶜ(i, j, k, ibg::SCIBG)
@@ -125,7 +121,7 @@ const SCIBG = ImmersedBoundaryGrid{<:Any, <:Any, <:Any, <:Any, <:Any, <:CutCellB
     # For a cell at k, the bottom face is k+1. The top face is k.
     # The full height is z_F[k] - z_F[k+1] = Δzᵃᵃᶜ(k).
     # The cut cell height should be z_F[k] - max(z_F[k+1], h).
-    # But we need to return the *effective Δz* for grid functions.
+    # Return the *effective Δz* for grid functions.
 
     # Reinterpreting the provided Δzᶜᶠᶜ:
     # It seems to calculate the height of the *cut portion* of cell k-1, ending at z_F[k].
@@ -146,16 +142,16 @@ const SCIBG = ImmersedBoundaryGrid{<:Any, <:Any, <:Any, <:Any, <:Any, <:CutCellB
     # Its full height is Δzᵃᵃᶜ(i,j,k, underlying_grid).
     # If it's a bottom cell, its height is reduced. The top is z_F[k]. The bottom is max(z_F[k+1], h).
     # Effective height of cell k = z_F[k] - max(z_F[k+1], h).
-    # How does this map to Δzᶜᶠᶜ etc.? It seems these functions are meant to return the effective vertical spacing *between* points.
+   
 
-    # Let's assume the provided Δz functions are correct for this specific CutCellBottom implementation.
+    # Assume the provided Δz functions are correct for this specific CutCellBottom implementation.
     # They define the effective vertical spacing required by Oceananigans operators.
-    # We need to ensure `bottom_height` is accessible and correctly interpolated/used.
+    # `bottom_height` is accessible and correctly interpolated/used.
     # `bottom_height` is assumed to be stored at C,C.
     # `ℑyᵃᶠᵃ` interpolates a C,C field to C,F.
     # `ℑxᶠᵃᵃ` interpolates a C,C field to F,C.
 
-    # We need the underlying grid spacing functions as a base.
+    # Underlying grid spacing functions as a base.
     import Oceananigans.Grids: Δzᶜᶠᶜ, Δzᶜᶠᶠ, Δzᶠᶜᶜ, Δzᶠᶜᶠ, Δzᶜᶜᶜ, Δzᶜᶜᶠ, Δzᶠᶠᶜ, Δzᶠᶠᶠ
 
     @inline function Δzᶜᶠᶜ(i, j, k, ibg::SCIBG)
@@ -170,7 +166,7 @@ const SCIBG = ImmersedBoundaryGrid{<:Any, <:Any, <:Any, <:Any, <:Any, <:CutCellB
         # Or if bottom_height is a function/array, ℑy needs the grid to interpolate.
         # The constructor takes `bottom_height` which can be a function or array.
         # The `immersed_cell` function accesses `ib.bottom_height[i, j]`. This suggests it's a Field or array.
-        # Let's assume it's a Field{Center, Center, Nothing} defined on the underlying grid.
+        # Field{Center, Center, Nothing} defined on the underlying grid.
         # Then `ℑyᵃᶠᵃ` needs the underlying grid.
         # h = ℑyᵃᶠᵃ(i, j, 1, underlying_grid, ib.bottom_height) # This requires ℑyᵃᶠᵃ on a Field
 
@@ -178,7 +174,7 @@ const SCIBG = ImmersedBoundaryGrid{<:Any, <:Any, <:Any, <:Any, <:Any, <:CutCellB
         # For Δzᶜᶠᶜ(i,j,k), which is conceptually vertical spacing around (C,F,C),
         # Bottom height interpolated to C,F.
         # Assume `ib.bottom_height` is a Field{Center, Center, Nothing}(underlying_grid).
-        # We need a version interpolated to C,F.
+        # Version interpolated to C,F.
         # This seems overly complicated. Let's stick to the logic from the provided snippet,
         # assuming `ib.bottom_height` somehow handles this. It is defined as {H}.
         # If H is a Field{C,C,N}, then `ib.bottom_height[i, j]` is just the value at C,C.
@@ -188,11 +184,11 @@ const SCIBG = ImmersedBoundaryGrid{<:Any, <:Any, <:Any, <:Any, <:Any, <:CutCellB
         # Then ℑyᵃᶠᵃ(i, j, 1, ibg, ib.bottom_height) seems incorrect syntax.
         # It should be `ℑyᵃᶠᵃ(i, j, 1, ibg.underlying_grid, ib.bottom_height)`.
 
-        # Let's re-read the provided snippet carefully: `h = ℑyᵃᶠᵃ(i, j, 1, ibg, ib.bottom_height)`
+        # `h = ℑyᵃᶠᵃ(i, j, 1, ibg, ib.bottom_height)`
         # This implies `ℑyᵃᶠᵃ` is overloaded for `SCIBG`.
-        # Let's assume `ib.bottom_height` is just a Field{C,C,N}(underlying_grid).
+        # Assume `ib.bottom_height` is just a Field{C,C,N}(underlying_grid).
         # Then `ℑyᵃᶠᵃ(i, j, 1, ibg, ib.bottom_height)` might be interpolating on the underlying grid coordinates?
-        # Let's use the base underlying grid interpolation `ℑyᵃᶠᵃ(i, j, 1, underlying_grid, ib.bottom_height)`.
+        # The base underlying grid interpolation `ℑyᵃᶠᵃ(i, j, 1, underlying_grid, ib.bottom_height)`.
 
         # Revert to simplest assumption: bottom_height is defined at C,C only.
         # The original cut cell code used bathymetry at C points for hFacC.
@@ -223,7 +219,7 @@ const SCIBG = ImmersedBoundaryGrid{<:Any, <:Any, <:Any, <:Any, <:Any, <:CutCellB
         # If z_F[k+1] > h, the cell is wet. `z - h` would be the thickness of the wet part *below* z_F[k+1].
         # This is defining the Δz associated with face k+1 ?
 
-        # Let's go back to the simplest interpretation matching the comment in the provided code:
+        
         # `z = znode(i, j, k+1, underlying_grid, c, c, f)` # z_F[k+1] - vertical face below C cell k
         # `h = ib.bottom_height[i, j]` # bottom height at C cell i,j
         # This calculation `max(ϵ * full_Δz, z - h)` seems to define the effective height *below z* at C,C.
@@ -233,13 +229,12 @@ const SCIBG = ImmersedBoundaryGrid{<:Any, <:Any, <:Any, <:Any, <:Any, <:CutCellB
         # The distance from z_C[k] to the effective bottom is z_C[k] - max(z_F[k+1], h).
 
         # This seems to define the "distance to the bottom" effective Δz for a half-cell below C.
-        # Let's trust the provided structure's intent and use the grid accessors on the underlying grid.
+        
         # `full_Δz = Δzᶜᶠᶜ(i, j, k, underlying_grid)`
         # `z_at_loc = znode(i, j, k, underlying_grid, c, f, c)` # Vertical location of this DeltaZ measure?
         # The provided snippet uses znode(i, j, k+1, ... c, c, f) for Δzᶜᶠᶜ calculation? This feels wrong.
         # It should use the z-locations relevant to Δzᶜᶠᶜ, i.e. zᶜᶠᶜ[k] and zᶜᶠᶜ[k+1].
-
-        # Let's assume the provided functions are defining the *vertical distance between nodes*
+    
         # appropriate for the cut cell based on the height `h`.
         # Δzᶜᶠᶜ(i,j,k) is the distance between zᶜᶠᶜ[k] and zᶜᶠᶜ[k+1].
         # This is normally Δzᵃᵃᶜ(k). In a cut cell, it's zᶜᶠᶜ[k] - effective_zᶜᶠᶜ[k+1].
@@ -247,11 +242,11 @@ const SCIBG = ImmersedBoundaryGrid{<:Any, <:Any, <:Any, <:Any, <:Any, <:CutCellB
 
         
         # those specific functions is correct for the intended CutCellBottom behavior.
-        # The `z_bottom(i, j, ibg)` needs to be added to ImmersedBoundaries API in Oceananigans master to work generally.
+        # The `z_bottom(i, j, ibg)` needs to be added to ImmersedBoundaries 
         # For now, define it here as in the snippet.
 
         # The provided Δz functions use `ℑyᵃᶠᵃ` and `ℑxᶠᵃᵃ`. These need a Field.
-        # Let's make `ib.bottom_height` a `Field{Center, Center, Nothing}`.
+        # `ib.bottom_height` a `Field{Center, Center, Nothing}`.
 
         @inline function Δzᶜᶠᶜ(i, j, k, ibg::SCIBG)
             underlying_grid = ibg.underlying_grid
@@ -263,13 +258,13 @@ const SCIBG = ImmersedBoundaryGrid{<:Any, <:Any, <:Any, <:Any, <:Any, <:CutCellB
 
             # Bottom height needs to be interpolated to C,F location.
             # Provided snippet used ℑyᵃᶠᵃ(i, j, 1, ibg, ib.bottom_height).
-            # Let's try to make this work. Assuming ib.bottom_height is a Field.
+            # Assuming ib.bottom_height is a Field.
             # This requires ℑyᵃᶠᵃ to work on IBG or the field itself to be IBG-aware.
-            # Let's assume ib.bottom_height is a Field{C,C,N} on the *underlying* grid.
+            # ib.bottom_height is a Field{C,C,N} on the *underlying* grid.
             # Then interpolation needs the underlying grid.
-            h = ℑyᵃᶠᵃ(i, j, 1, underlying_grid, ib.bottom_height) # Interpolate h to C,F at k=1 (surface z index)
+            h = ℑyᵃᶠᵃ(i, j, 1, underlying_grid, ib.bottom_height) 
 
-            # Check if the cell is a bottom cell
+            
             at_the_bottom = bottom_cell(i, j, k, ibg) # Check if cell k is the partial cell
 
             full_Δz = Δzᶜᶠᶜ(i, j, k, underlying_grid) # Standard vertical distance at C,F,C k
@@ -279,7 +274,7 @@ const SCIBG = ImmersedBoundaryGrid{<:Any, <:Any, <:Any, <:Any, <:Any, <:CutCellB
             # `max(ϵ * full_Δz, z - h)` calculates the effective thickness of the cut *cell*.
             # And this thickness is used as the effective Δz for the cell k?
 
-            # Let's reconsider: The Δz functions define the distance *between* adjacent points for operators.
+            # The Δz functions define the distance *between* adjacent points for operators.
             # Δzᶜᶠᶜ(i, j, k) is the distance between tracer points T[i,j,k] and T[i,j,k-1] when evaluated at location (C,F,C,k)? No.
             # Δzᶜᶠᶜ is distance between C points at F face z.
             # Δzᶜᶠᶜ(i,j,k) is distance between zᶜᶠᶜ[k] and zᶜᶠᶜ[k+1].
@@ -290,13 +285,13 @@ const SCIBG = ImmersedBoundaryGrid{<:Any, <:Any, <:Any, <:Any, <:Any, <:CutCellB
             # This value is used when `at_the_bottom` is true (meaning cell k is the cut cell).
             # This effective Δz should be related to `z_F[k] - max(z_F[k+1], h_CF)`.
 
-            # Let's assume the provided `Δzᶜᶠᶜ` etc. functions are correct *as written* for this specific IB type.
-            # They define the distance between the nodes *relevant for operators* in the cut cell.
+    
+            
             # This implies `z = znode(i, j, k+1, underlying_grid, c, c, f)` is the correct z location for the boundary.
             # And `h = ℑyᵃᶠᵃ(i, j, 1, underlying_grid, ib.bottom_height)` is the correct interpolated height.
             # And `max(ϵ * full_Δz, z - h)` is the correct distance measure.
 
-            # Let's simplify slightly and assume `ib.bottom_height` is always an array/Field at C,C.
+            # Simplify slightly and assume `ib.bottom_height` is always an array/Field at C,C.
             # Then `ℑy` and `ℑx` must operate on that field and the *underlying* grid.
 
             h = ℑyᵃᶠᵃ(i, j, 1, underlying_grid, ib.bottom_height) # Interpolate C,C bottom_height to C,F
@@ -309,7 +304,6 @@ const SCIBG = ImmersedBoundaryGrid{<:Any, <:Any, <:Any, <:Any, <:Any, <:CutCellB
             # The cut height is the distance from the *top face* of the cut cell (z_F[k])
             # down to the max of the original bottom face (z_F[k+1]) and the boundary (h).
             # Cut cell height = z_F[k] - max(z_F[k+1], h).
-            # Let's check if the provided snippet is doing this.
             # `z` is z_F[k+1]. `h` is interpolated bottom height.
             # `z - h` is z_F[k+1] - h. This is positive if z_F[k+1] > h.
             # It seems to be calculating the height *above* the bottom boundary within the cell below k+1?
@@ -320,7 +314,7 @@ const SCIBG = ImmersedBoundaryGrid{<:Any, <:Any, <:Any, <:Any, <:Any, <:CutCellB
             # Δzᶜᶜᶠ(k) is distance between z_C[k] and z_C[k+1].
             # In a cut cell, the distance between C[k] and C[k+1] is complex.
 
-            # Let's make a simplifying assumption: The CutCellBottom only modifies the *volume* of the cell and the *vertical face area* at the bottom.
+            # Simplifying assumption: The CutCellBottom only modifies the *volume* of the cell and the *vertical face area* at the bottom.
             # Standard Δx, Δy, and Δz at F,C, points remain based on the underlying grid.
             # This simplifies the forcings/diagnostics:
             # Volume(C) = hFacC * dx * dy * dz
@@ -335,7 +329,7 @@ const SCIBG = ImmersedBoundaryGrid{<:Any, <:Any, <:Any, <:Any, <:Any, <:CutCellB
             # For a `GridFittedBottom{H,E}`, `immersed_cell(i, j, k, grid, ib)` is `znode(i, j, k, grid, c, c, c) < ib.bottom_height[i, j]`.
             # This assumes `bottom_height` is at C,C. So a cell is solid if its center is below the boundary height. This is *not* the MITgcm partial cell logic.
 
-            # Let's stick to the provided `CutCellBottom` definition for `immersed_cell` (using z_F[k+1] vs h) and the `bottom_cell` definition.
+            # `CutCellBottom` definition for `immersed_cell` (using z_F[k+1] vs h) and the `bottom_cell` definition.
             # And *attempt* to use the provided Δz logic.
 
             # Δzᶜᶠᶜ(i,j,k, ibg): Need to calculate distance between zᶜᶠᶜ[k] and zᶜᶠᶜ[k+1]?
@@ -347,20 +341,19 @@ const SCIBG = ImmersedBoundaryGrid{<:Any, <:Any, <:Any, <:Any, <:Any, <:CutCellB
             # Let's assume `ib.bottom_height` is actually Field{Center, Center, Nothing}(underlying_grid).
             # And `h` is needed at the same depth as the vertical face location.
 
-            # Let's assume the provided Δz functions are meant to define the effective thickness of the *cut* layer.
+            # Provided Δz functions are meant to define the effective thickness of the *cut* layer.
             # This layer is cell k if `bottom_cell(i, j, k, ibg)` is true.
             # The thickness is `z_F[k] - max(z_F[k+1], h_interpolated)`.
             # `h_interpolated` should be h interpolated to the horizontal location of the specific Δz accessor (C,F, or F,C).
 
-            # Let's redefine the Δz functions based on the common principle:
+            # Redefine the Δz functions based on the common principle:
             # Distance between adjacent nodes is reduced in the cut cell.
             # Δzᶜᶜᶜ(i, j, k, ibg): Vertical distance between C points k and k+1.
             # Full distance: Δzᶜᶜᶜ(i, j, k, underlying_grid).
             # If cell k+1 is a bottom cell, the distance between C[k] and C[k+1] is affected.
             # If cell k is a bottom cell, the distance between C[k-1] and C[k] is affected.
-            # This seems overly complicated for a basic cut cell model.
 
-            # Let's assume the simplest model: only the VOLUME of the C cell is fractional,
+            # Only the VOLUME of the C cell is fractional,
             # and the AREA of the vertical face below it (C,C,F) is fractional.
             # Horizontal face areas (F,C,C) and horizontal cell volumes (F,C,C) are not fractional.
             # Vertical face areas (C,C,F) are fractional based on hFacS.
@@ -381,7 +374,6 @@ const SCIBG = ImmersedBoundaryGrid{<:Any, <:Any, <:Any, <:Any, <:Any, <:CutCellB
             # immersed_cell(i, j, k, underlying_grid, ib::CutCellBottom) = znode(i, j, k+1, underlying_grid, c, c, f) <= ib.bottom_height[i, j] # z_F[k+1] vs h_C_C
             # And rely on default IBG `volume` and `area` implementations which should use this `immersed_cell` criterion.
 
-            # Let's try this simplified approach first, as it aligns better with the idea that IBG handles geometry.
             # If that fails, we can revisit the provided Δz functions.
 
             # *** Reverting the provided Δz functions for now ***
