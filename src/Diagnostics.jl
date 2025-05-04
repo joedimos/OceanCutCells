@@ -3,7 +3,7 @@ module Diagnostics
 using Oceananigans
 using Oceananigans.Fields: Center, Face, Field, fill_halo_regions
 using Oceananigans.Grids: ImmersedBoundaryGrid, is_immersed_cell, is_immersed_face,
-                          volume, areaᶜᶜᶠ, areaᶠᶜᶜ # Access geometry from IBG
+                          volume, areaᶜᶜᶠ, areaᶠᶜᶜ 
 
 # Custom diagnostic to calculate w (at C,C,F) from u (at F,C,C) using continuity
 # ∇ . u = ∂u/∂x + ∂w/∂z = 0
