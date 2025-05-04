@@ -18,14 +18,14 @@ using Oceananigans.Fields: Field # Export Field
 using Printf # Moved from the script
 using JLD2 # Moved from the script
 
-# Include our custom modules
+
 include("Parameters.jl")
 include("Geometry.jl") # Now includes CutCellBottom definition
 include("Forcings.jl")
 include("Diagnostics.jl")
 include("ModelSetup.jl")
 
-# Re-export necessary symbols
+
 export
     # Parameters
     CutCellParameters, # Now contains only physical parameters
@@ -33,18 +33,21 @@ export
     bathymetry_profile,
     bathymetry_derivative, # Keep in case needed
     CutCellBottom, # Export the new immersed boundary type
-    # Forcings (users might need to define custom ones)
-    # Keep exporting the individual forcing functions if users might want to combine them differently
+   
+    
     add_cut_cell_pressure_gradient_force!,
     add_cut_cell_advection!, # Generic advection
     add_cut_cell_diffusion!, # Generic diffusion
     add_cut_cell_vertical_advection_u!,
     add_cut_cell_vertical_diffusion_u!,
     add_cut_cell_bottom_drag!,
+
     # Diagnostics
     diagnose_cut_cell_w!,
+
     # Model Setup
     build_cut_cell_model,
+
     # Re-export useful Oceananigans types/functions/macros
     VerticallyStretchedRectilinearGrid,
     ImmersedBoundaryGrid, # Export ImmersedBoundaryGrid
