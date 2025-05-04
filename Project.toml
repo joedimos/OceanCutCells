@@ -1,5 +1,5 @@
 name = "OceanCutCells"
-    uuid = f6f24584-9f4e-4372-a78a-b1256e8a6484
+    uuid = "f6f24584-9f4e-4372-a78a-b1256e8a6484"
     authors = ["Joseph Dimos <joedimos@gmail.com>"]
     version = "0.1.0"
 
