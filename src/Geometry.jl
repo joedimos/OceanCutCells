@@ -151,6 +151,5 @@ accounting for partial cells at the bottom boundary.
     return bottom_cell(i, j, k, ibg) ? max(ib.minimum_fractional_Δz * full_Δz, z_face - h) : full_Δz
 end
 
-# Similar implementations for other Δz variants would follow here...
 
 end # module Geometry
