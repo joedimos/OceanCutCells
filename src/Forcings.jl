@@ -8,7 +8,7 @@ using Oceananigans.Operators: ∂xᶠᶜᶜ
 using Oceananigans.Fields: Center, Face, fill_halo_regions!
 using Oceananigans.Forcings: CustomForcing
 
-const ϵ = 1e-10  # Small number for floating point comparisons
+const ϵ = 1e-10 
 
 """
     add_cut_cell_pressure_gradient_force!(∂u∂t, model)
